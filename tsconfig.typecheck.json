@@ -13,6 +13,7 @@
   ],
   "exclude": [
     "**/node_modules",
+    "**/fixtures/**",
     "packages/analyzer/debug.ts"
   ]
 }
