@@ -3,16 +3,16 @@
   "tasks": [
     {
       "label": "code-vibe: build",
-      "type": "shell",
-      "command": "${env:APPDATA}\\npm\\pnpm.cmd",
+      "type": "process",
+      "command": "pnpm",
+      "windows": {
+        "command": "pnpm.cmd"
+      },
       "args": [
         "build"
       ],
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "Path": "C:\\Program Files\\nodejs;${env:APPDATA}\\npm;${env:Path}"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "group": {
         "kind": "build",

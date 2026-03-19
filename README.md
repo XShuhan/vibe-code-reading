@@ -74,7 +74,7 @@ After vibe coding (rapid prototyping with AI assistance), code often works but b
 5. Launch Extension Development Host:
    - Open the repository root in VS Code
    - Press `F5` and choose `Run Code Vibe Reading`
-   - The root `.vscode` config builds the monorepo first, then launches the extension against `/Users/xue/Projects/code-vibe-testing/workspace`
+   - The root `.vscode` config builds the monorepo first, then launches the extension against the bundled sample workspace at `~/Projects/code-vibe-testing/workspace` inside this repository
 
 ### VS Code Marketplace
 

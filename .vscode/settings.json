@@ -1,3 +1,7 @@
 {
-    "vibe.model.provider": "mock"
+  "vibe.model.provider": "openai-compatible",
+  "vibe.model.baseUrl": "https://api.kimi.com/coding/v1",
+  "vibe.model.model": "kimi-for-coding",
+  "vibe.model.temperature": 0.1,
+  "vibe.model.maxTokens": 32768
 }
