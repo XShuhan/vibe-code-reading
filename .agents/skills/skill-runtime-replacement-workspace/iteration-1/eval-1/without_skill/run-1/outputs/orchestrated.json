@@ -1,0 +1,35 @@
+{
+  "questionType": "call_flow",
+  "skillId": "CallFlowSkill",
+  "systemInstruction": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: CallFlowSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Analyze callers, callees, and upstream/downstream handoff points for selected code. Primary skill focus: Explain callers, callees, and data/control handoff points. Skill document path: fallback-default Apply default style skills.",
+  "promptInstruction": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: call_flow.\nActive skill bundle: CallFlowSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize evidence with call/import reasons and connected symbols.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Explicitly mark upstream and downstream.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. CallFlowSkill\nDescription: Analyze callers, callees, and upstream/downstream handoff points for selected code.\nFocus: Explain callers, callees, and data/control handoff points.\nSource: fallback-default\nMap upstream callers, downstream callees, and impact radius. Mark unknown dynamic edges and confidence.\nLearned skills: none yet.\nFull mode: provide complete analysis across all base sections.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Call flow / upstream-downstream\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: not applied.",
+  "prioritizedEvidence": [
+    {
+      "id": "evidence-2",
+      "workspaceId": "eval-workspace",
+      "path": "src/token.ts",
+      "startLine": 4,
+      "endLine": 20,
+      "symbolId": "symbol:issueToken",
+      "excerpt": "export function issueToken(userId: string) { return sign(userId); }",
+      "score": 0.73,
+      "reason": "call graph"
+    },
+    {
+      "id": "evidence-1",
+      "workspaceId": "eval-workspace",
+      "path": "src/auth.ts",
+      "startLine": 10,
+      "endLine": 32,
+      "symbolId": "symbol:createSession",
+      "excerpt": "export function createSession(userId: string) { if (!userId) throw new Error('missing'); return issueToken(userId); }",
+      "score": 0.91,
+      "reason": "active symbol"
+    }
+  ],
+  "requestedSections": [
+    "Call flow / upstream-downstream"
+  ],
+  "focusMode": "full",
+  "summaryMode": false
+}

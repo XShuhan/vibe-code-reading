@@ -1,0 +1,11 @@
+{
+  "eval_id": 2,
+  "eval_name": "principle",
+  "prompt": "为什么这里要这么设计？关键机制和 tradeoff 是什么？",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: When To Reconsider",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

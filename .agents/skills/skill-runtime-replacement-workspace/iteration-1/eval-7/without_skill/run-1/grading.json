@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Skill id matches expected question type",
+      "passed": true,
+      "evidence": "skillId=TestingNotesSkill"
+    },
+    {
+      "text": "without_skill run falls back to default skill document behavior",
+      "passed": true,
+      "evidence": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: TestingNotesSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Provide testing scenarios and validation strategy grounded in current logic and risks. Primary skill focus: Propose targeted tests for behavior, edge cases, and failure handling. Skill document path: fallback-default Apply default style skills."
+    },
+    {
+      "text": "without_skill includes skill marker: happy path",
+      "passed": true,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: testing_notes.\nActive skill bundle: TestingNotesSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branches, error paths, boundary parsing, and external dependency seams.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Use testable scenarios with clear setup, action, and expected outcome.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. TestingNotesSkill\nDescription: Provide testing scenarios and validation strategy grounded in current logic and risks.\nFocus: Propose targeted tests for behavior, edge cases, and failure handling.\nSource: fallback-default\nList high-value tests first, covering happy path, edge cases, and failure modes. Suggest mocking boundaries when external dependencies exist.\nLearned skills: none yet.\nFocused mode: prioritize only sections directly requested by user. Non-relevant base sections can be empty strings.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Testing Notes\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: sections MUST stay within requested section titles only: Testing Notes."
+    },
+    {
+      "text": "without_skill prompt still preserves base output constraints",
+      "passed": true,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: testing_notes.\nActive skill bundle: TestingNotesSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branches, error paths, boundary parsing, and external dependency seams.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Use testable scenarios with clear setup, action, and expected outcome.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. TestingNotesSkill\nDescription: Provide testing scenarios and validation strategy grounded in current logic and risks.\nFocus: Propose targeted tests for behavior, edge cases, and failure handling.\nSource: fallback-default\nList high-value tests first, covering happy path, edge cases, and failure modes. Suggest mocking boundaries when external dependencies exist.\nLearned skills: none yet.\nFocused mode: prioritize only sections directly requested by user. Non-relevant base sections can be empty strings.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Testing Notes\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: sections MUST stay within requested section titles only: Testing Notes."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1
+  }
+}

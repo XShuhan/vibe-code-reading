@@ -1,0 +1,11 @@
+{
+  "eval_id": 5,
+  "eval_name": "input-output",
+  "prompt": "这个函数的输入输出是什么？参数约束和返回值结构是什么？",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: side effects",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

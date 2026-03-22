@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Skill id matches expected question type",
+      "passed": true,
+      "evidence": "skillId=SimplifiedPseudocodeSkill"
+    },
+    {
+      "text": "without_skill run falls back to default skill document behavior",
+      "passed": true,
+      "evidence": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: SimplifiedPseudocodeSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Rewrite selected logic into simplified pseudocode with faithful branching and step order. Primary skill focus: Translate implementation into concise pseudocode that preserves control flow. Skill document path: fallback-default Apply default style skills."
+    },
+    {
+      "text": "without_skill includes skill marker: branch",
+      "passed": true,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: simplified_pseudocode.\nActive skill bundle: SimplifiedPseudocodeSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branch conditions, loops, state updates, and return points.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Keep pseudocode readable and language-agnostic while preserving key logic.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. SimplifiedPseudocodeSkill\nDescription: Rewrite selected logic into simplified pseudocode with faithful branching and step order.\nFocus: Translate implementation into concise pseudocode that preserves control flow.\nSource: fallback-default\nOutput concise pseudocode first, then explain non-obvious branches. Do not drop guard conditions or error paths.\nLearned skills: none yet.\nFocused mode: prioritize only sections directly requested by user. Non-relevant base sections can be empty strings.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Simplified Pseudocode\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: sections MUST stay within requested section titles only: Simplified Pseudocode."
+    },
+    {
+      "text": "without_skill prompt still preserves base output constraints",
+      "passed": true,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: simplified_pseudocode.\nActive skill bundle: SimplifiedPseudocodeSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branch conditions, loops, state updates, and return points.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Keep pseudocode readable and language-agnostic while preserving key logic.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. SimplifiedPseudocodeSkill\nDescription: Rewrite selected logic into simplified pseudocode with faithful branching and step order.\nFocus: Translate implementation into concise pseudocode that preserves control flow.\nSource: fallback-default\nOutput concise pseudocode first, then explain non-obvious branches. Do not drop guard conditions or error paths.\nLearned skills: none yet.\nFocused mode: prioritize only sections directly requested by user. Non-relevant base sections can be empty strings.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Simplified Pseudocode\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: sections MUST stay within requested section titles only: Simplified Pseudocode."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1
+  }
+}

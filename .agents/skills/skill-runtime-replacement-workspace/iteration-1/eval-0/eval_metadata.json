@@ -1,0 +1,11 @@
+{
+  "eval_id": 0,
+  "eval_name": "explain-code",
+  "prompt": "解释这段代码具体做什么，按步骤来。",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: Question Restatement",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

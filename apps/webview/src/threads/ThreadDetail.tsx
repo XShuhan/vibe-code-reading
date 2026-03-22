@@ -39,6 +39,17 @@ function MessageCard({
     structured?.sections && structured.sections.length > 0
       ? structured.sections
       : null;
+  const extraSections =
+    structured?.extraSections && structured.extraSections.length > 0
+      ? structured.extraSections.filter((section) => {
+          if (!dynamicSections) {
+            return true;
+          }
+          return !dynamicSections.some(
+            (item) => normalizeSectionTitle(item.title) === normalizeSectionTitle(section.title)
+          );
+        })
+      : [];
   const streaming = message.streamStatus?.isStreaming === true;
   const currentSection = message.streamStatus?.currentSection;
 
@@ -72,15 +83,26 @@ function MessageCard({
             </>
           ) : null}
           {dynamicSections ? (
-            dynamicSections.map((section, index) => (
-              <SectionBlock
-                key={`${section.title}-${index}`}
-                title={section.title}
-                content={section.content}
-                streaming={streaming}
-                isActive={currentSection === section.title}
-              />
-            ))
+            <>
+              {dynamicSections.map((section, index) => (
+                <SectionBlock
+                  key={`${section.title}-${index}`}
+                  title={section.title}
+                  content={section.content}
+                  streaming={streaming}
+                  isActive={currentSection === section.title}
+                />
+              ))}
+              {extraSections.map((section, index) => (
+                <SectionBlock
+                  key={`${section.title}-extra-${index}`}
+                  title={section.title}
+                  content={section.content}
+                  streaming={streaming}
+                  isActive={currentSection === section.title}
+                />
+              ))}
+            </>
           ) : (
             <>
               <SectionBlock
@@ -180,5 +202,9 @@ function shouldShowSummaryPrelude(answer: NonNullable<ThreadMessage["structuredA
   }
 
   return false;
+}
+
+function normalizeSectionTitle(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 

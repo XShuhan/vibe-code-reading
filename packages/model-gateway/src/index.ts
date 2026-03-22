@@ -492,13 +492,22 @@ function formatStructuredAnswerMarkdown(answer: StructuredThreadAnswer): string 
     ["Risks / uncertainties", [answer.risks, answer.uncertainty].filter(Boolean).join("\n")]
   ].filter((entry) => entry[1].trim().length > 0);
 
+  const extraSections = (answer.extraSections ?? [])
+    .map((section) => [section.title, section.content] as const)
+    .filter((entry) => entry[1].trim().length > 0);
+
   const finalSections =
     primarySections.length > 0
-      ? primarySections.map((section) => [section.title, section.content] as const)
-      : [
-          ...fallbackSections,
-          ...((answer.extraSections ?? []).map((section) => [section.title, section.content] as const))
-        ].filter((entry) => entry[1].trim().length > 0);
+      ? [
+          ...primarySections.map((section) => [section.title, section.content] as const),
+          ...extraSections.filter(
+            (entry) =>
+              !primarySections.some(
+                (section) => normalizeSectionTitle(section.title) === normalizeSectionTitle(entry[0])
+              )
+          )
+        ]
+      : [...fallbackSections, ...extraSections].filter((entry) => entry[1].trim().length > 0);
 
   return [
     ...(answer.questionRestatement ? ["Question restatement", answer.questionRestatement, ""] : []),
@@ -508,4 +517,8 @@ function formatStructuredAnswerMarkdown(answer: StructuredThreadAnswer): string 
     "Source references",
     ...answer.sourceReferences.map((reference, index) => `${index + 1}. ${reference}`)
   ].join("\n");
+}
+
+function normalizeSectionTitle(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }

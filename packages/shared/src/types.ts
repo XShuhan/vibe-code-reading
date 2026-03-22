@@ -26,14 +26,26 @@ export type ThreadQuestionType =
   | "call_flow"
   | "principle"
   | "risk_review"
-  | "module_summary";
+  | "module_summary"
+  | "input_output"
+  | "simplified_pseudocode"
+  | "performance_considerations"
+  | "concurrency_state"
+  | "testing_notes"
+  | "refactor_suggestions";
 
 export type ThreadSkillId =
   | "ExplainSkill"
   | "CallFlowSkill"
   | "PrincipleSkill"
   | "RiskReviewSkill"
-  | "ModuleSummarySkill";
+  | "ModuleSummarySkill"
+  | "InputOutputSkill"
+  | "SimplifiedPseudocodeSkill"
+  | "PerformanceConsiderationsSkill"
+  | "ConcurrencyStateSkill"
+  | "TestingNotesSkill"
+  | "RefactorSuggestionsSkill";
 
 export type CardType =
   | "SymbolCard"
@@ -93,6 +105,24 @@ export interface Citation {
   endLine: number;
   symbolId?: string;
   label: string;
+}
+
+export interface CodeThreadLocation {
+  filePath: string;
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  anchorText?: string;
+}
+
+export interface CodeThreadMapping {
+  id: string;
+  workspaceId: string;
+  threadId: string;
+  location: CodeThreadLocation;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EvidenceSpan {
@@ -231,7 +261,9 @@ export interface WorkspaceIndex {
 export interface EditorSelectionState {
   activeFile: string;
   startLine: number;
+  startColumn?: number;
   endLine: number;
+  endColumn?: number;
   selectedText: string;
   currentSymbolId?: string;
 }

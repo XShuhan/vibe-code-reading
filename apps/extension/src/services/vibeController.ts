@@ -65,7 +65,13 @@ export class VibeController implements vscode.Disposable {
     });
   }
 
-  async openThread(threadId: string): Promise<void> {
+  async openThread(
+    threadId: string,
+    options?: {
+      viewColumn?: vscode.ViewColumn;
+      preserveFocus?: boolean;
+    }
+  ): Promise<void> {
     const thread = this.threadService.getThread(threadId);
     if (!thread) {
       vscode.window.showWarningMessage("The selected thread could not be found.");
@@ -79,7 +85,7 @@ export class VibeController implements vscode.Disposable {
     };
     const existing = this.threadPanels.get(threadId);
     if (existing) {
-      existing.reveal(vscode.ViewColumn.Beside);
+      existing.reveal(options?.viewColumn ?? vscode.ViewColumn.Beside, options?.preserveFocus ?? false);
       await this.updatePanel(existing, state);
       return;
     }
@@ -87,7 +93,7 @@ export class VibeController implements vscode.Disposable {
     const panel = vscode.window.createWebviewPanel(
       "vibe.thread",
       state.title,
-      vscode.ViewColumn.Beside,
+      options?.viewColumn ?? vscode.ViewColumn.Beside,
       this.getWebviewOptions()
     );
     this.threadPanels.set(threadId, panel);

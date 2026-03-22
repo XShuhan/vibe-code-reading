@@ -1,0 +1,11 @@
+{
+  "eval_id": 7,
+  "eval_name": "testing-notes",
+  "prompt": "请给我测试用例建议，包含 happy path 和失败路径。",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: happy path",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

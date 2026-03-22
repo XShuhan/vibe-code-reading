@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
-import type { Card, Thread, WorkspaceIndex, CanvasState } from "@code-vibe/shared";
+import type { Card, Thread, WorkspaceIndex, CanvasState, CodeThreadMapping } from "@code-vibe/shared";
 import { createId, nowIso } from "@code-vibe/shared";
 
 import { createWorkspacePersistence, ensureWorkspaceStorage } from "./index";
@@ -11,6 +11,7 @@ import { BaseJsonStore } from "./stores/baseJsonStore";
 import { ThreadStore } from "./stores/threadStore";
 import { CardStore } from "./stores/cardStore";
 import { CanvasStore } from "./stores/canvasStore";
+import { CodeThreadMappingStore } from "./stores/codeThreadMappingStore";
 import { SnapshotStore } from "./stores/snapshotStore";
 
 describe("persistence", () => {
@@ -110,6 +111,35 @@ describe("persistence", () => {
       const store = new ThreadStore(path.join(tempDir, "empty.json"));
       const loaded = await store.load();
       expect(loaded).toEqual([]);
+    });
+  });
+
+  describe("CodeThreadMappingStore", () => {
+    it("saves and loads code-thread mappings", async () => {
+      const store = new CodeThreadMappingStore(path.join(tempDir, "code-thread-mappings.json"));
+
+      const mappings: CodeThreadMapping[] = [
+        {
+          id: createId("mapping"),
+          workspaceId: "ws-1",
+          threadId: "thread-1",
+          location: {
+            filePath: "src/auth.ts",
+            startLine: 10,
+            startColumn: 3,
+            endLine: 14,
+            endColumn: 20,
+            anchorText: "function login"
+          },
+          createdAt: nowIso(),
+          updatedAt: nowIso()
+        }
+      ];
+
+      await store.save(mappings);
+      const loaded = await store.load();
+
+      expect(loaded).toEqual(mappings);
     });
   });
 
@@ -266,6 +296,22 @@ describe("persistence", () => {
       };
 
       await persistence.saveThreads(threads);
+      await persistence.saveCodeThreadMappings([
+        {
+          id: createId("mapping"),
+          workspaceId: "ws-test",
+          threadId: threads[0].id,
+          location: {
+            filePath: "src/test.ts",
+            startLine: 1,
+            startColumn: 1,
+            endLine: 3,
+            endColumn: 1
+          },
+          createdAt: nowIso(),
+          updatedAt: nowIso()
+        }
+      ]);
       await persistence.saveCards(cards);
       await persistence.saveIndex(index);
 
@@ -281,6 +327,7 @@ describe("persistence", () => {
       await persistence.saveCanvas(canvas);
 
       await expect(persistence.loadThreads()).resolves.toEqual(threads);
+      await expect(persistence.loadCodeThreadMappings()).resolves.toHaveLength(1);
       await expect(persistence.loadCards()).resolves.toEqual(cards);
       await expect(persistence.loadIndex()).resolves.toEqual(index);
       await expect(persistence.loadCanvas()).resolves.toEqual(canvas);

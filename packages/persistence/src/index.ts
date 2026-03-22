@@ -1,17 +1,20 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { CanvasState, Card, Thread, WorkspaceIndex } from "@code-vibe/shared";
+import type { CanvasState, Card, CodeThreadMapping, Thread, WorkspaceIndex } from "@code-vibe/shared";
 import { createId, nowIso } from "@code-vibe/shared";
 
 import { CanvasStore } from "./stores/canvasStore";
 import { CardStore } from "./stores/cardStore";
+import { CodeThreadMappingStore } from "./stores/codeThreadMappingStore";
 import { SnapshotStore } from "./stores/snapshotStore";
 import { ThreadStore } from "./stores/threadStore";
 
 export interface PersistenceLayer {
   loadThreads(): Promise<Thread[]>;
   saveThreads(threads: Thread[]): Promise<void>;
+  loadCodeThreadMappings(): Promise<CodeThreadMapping[]>;
+  saveCodeThreadMappings(mappings: CodeThreadMapping[]): Promise<void>;
   loadCards(): Promise<Card[]>;
   saveCards(cards: Card[]): Promise<void>;
   loadCanvas(): Promise<CanvasState>;
@@ -29,6 +32,7 @@ export function createWorkspacePersistence(
   workspaceId: string
 ): PersistenceLayer {
   const threadStore = new ThreadStore(path.join(storageRoot, "threads.json"));
+  const codeThreadMappingStore = new CodeThreadMappingStore(path.join(storageRoot, "code-thread-mappings.json"));
   const cardStore = new CardStore(path.join(storageRoot, "cards.json"));
   const canvasStore = new CanvasStore(path.join(storageRoot, "canvas.json"));
   const snapshotStore = new SnapshotStore(path.join(storageRoot, "index.json"));
@@ -36,6 +40,8 @@ export function createWorkspacePersistence(
   return {
     loadThreads: () => threadStore.load(),
     saveThreads: (threads) => threadStore.save(threads),
+    loadCodeThreadMappings: () => codeThreadMappingStore.load(),
+    saveCodeThreadMappings: (mappings) => codeThreadMappingStore.save(mappings),
     loadCards: () => cardStore.load(),
     saveCards: (cards) => cardStore.save(cards),
     async loadCanvas() {

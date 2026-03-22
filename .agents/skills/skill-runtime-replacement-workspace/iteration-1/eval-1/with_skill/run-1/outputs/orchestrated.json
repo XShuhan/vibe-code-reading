@@ -1,0 +1,35 @@
+{
+  "questionType": "call_flow",
+  "skillId": "CallFlowSkill",
+  "systemInstruction": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: CallFlowSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Analyze callers, callees, and upstream/downstream handoff points for selected code. Use this whenever users ask about call flow, who calls what, caller/callee relationships, 上下游, 调用链, impact analysis, or where to trace next. Primary skill focus: Identify upstream callers and downstream callees. Skill document path: E:\\LLM\\vibe-code-reading\\.agents\\skills\\call-flow-skill\\SKILL.md Apply default style skills.",
+  "promptInstruction": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: call_flow.\nActive skill bundle: CallFlowSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize evidence with call/import reasons and connected symbols.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Explicitly mark upstream and downstream.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. CallFlowSkill\nDescription: Analyze callers, callees, and upstream/downstream handoff points for selected code. Use this whenever users ask about call flow, who calls what, caller/callee relationships, 上下游, 调用链, impact analysis, or where to trace next.\nFocus: Identify upstream callers and downstream callees.\nSource: E:\\LLM\\vibe-code-reading\\.agents\\skills\\call-flow-skill\\SKILL.md\n# Call Flow Skill\n\nUse this skill to map execution relationships around a target symbol.\n\n## Core goals\n\n1. Identify upstream callers and downstream callees.\n2. Explain data/control handoff between key nodes.\n3. Show impact radius for changes to the target symbol.\n\n## Workflow\n\n1. Lock the target symbol.\n   - Resolve function/class/module in focus.\n2. Map upstream first.\n   - List who invokes the target and from where.\n   - Distinguish direct vs indirect callers when possible.\n3. Map downstream next.\n   - List key functions/components called by the target.\n   - Highlight side-effect points (IO, network, state mutation, persistence).\n4. Explain handoff.\n   - For each important edge, describe what is passed and why it matters.\n5. Mark unknown edges.\n   - Explicitly note dynamic dispatch/reflection/runtime wiring gaps.\n\n## Output structure\n\nALWAYS include:\n\n1. `Question Restatement`\n2. `Conclusion`\n3. `Call Flow`\n4. `Upstream`\n5. `Downstream`\n6. `Impact Analysis`\n7. `Uncertainty`\n8. `Source References`\n\nIn `Call Flow`, include at least one arrow chain like:\n\n`Entry -> Target -> Dependency -> Side Effect`\n\n## Quality bar\n\n- Explicitly label upstream and downstream.\n- Prefer small, readable chains over giant unreadable trees.\n- Do not claim a caller/callee relationship without evidence.\n- If evidence is partial, state confidence level and missing links.\nLearned skills: none yet.\nFull mode: provide complete analysis across all base sections.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Call flow / upstream-downstream\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: not applied.",
+  "prioritizedEvidence": [
+    {
+      "id": "evidence-2",
+      "workspaceId": "eval-workspace",
+      "path": "src/token.ts",
+      "startLine": 4,
+      "endLine": 20,
+      "symbolId": "symbol:issueToken",
+      "excerpt": "export function issueToken(userId: string) { return sign(userId); }",
+      "score": 0.73,
+      "reason": "call graph"
+    },
+    {
+      "id": "evidence-1",
+      "workspaceId": "eval-workspace",
+      "path": "src/auth.ts",
+      "startLine": 10,
+      "endLine": 32,
+      "symbolId": "symbol:createSession",
+      "excerpt": "export function createSession(userId: string) { if (!userId) throw new Error('missing'); return issueToken(userId); }",
+      "score": 0.91,
+      "reason": "active symbol"
+    }
+  ],
+  "requestedSections": [
+    "Call flow / upstream-downstream"
+  ],
+  "focusMode": "full",
+  "summaryMode": false
+}

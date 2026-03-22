@@ -65,7 +65,7 @@ Required fields:
 
 The current implementation expects an OpenAI-compatible chat completion API.
 
-For `Project Overview`, `glm`-series APIs are currently not recommended. In our testing, their generated overview structure and content quality were noticeably worse than alternatives such as `qwen3.5-plus`, which often leads to weaker or less stable overview results.
+For `Project Overview`, `glm`-series APIs are currently not recommended. In our testing, their generated overview structure and content quality were noticeably worse than other alternatives, which often leads to weaker or less stable overview results.
 
 ### 3. Index And Read
 

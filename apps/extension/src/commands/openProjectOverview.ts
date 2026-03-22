@@ -78,7 +78,7 @@ function renderOverviewHtml(
   rootPath: string
 ): string {
   const copy = getCopy(language);
-  const refreshUri = `command:${COMMANDS.refreshIndex}`;
+  const refreshUri = `command:${COMMANDS.refreshIndexAndOverview}`;
   const statusBadge = renderStatusBadge(status, language);
 
   if (!overview) {

@@ -17,8 +17,10 @@ import {
 import {
   buildProjectOverviewPrompt,
   normalizeGeneratedProjectOverview,
+  type ProjectOverviewSkillId,
   sanitizeGeneratedProjectOverview
 } from "../agent/projectOverviewOrchestrator";
+import { planProjectOverviewSkillSelection } from "../agent/skillPlanner";
 import { generateProjectSummary } from "./indexService";
 import type { IndexService, ProjectSummary } from "./indexService";
 
@@ -235,8 +237,36 @@ export class ProjectOverviewService {
     const index = explicitIndex ?? (await this.indexService.ensureIndex());
     const language = await getWorkspaceLanguage(this.context);
     const dossier = await buildProjectOverviewDossier(index, this.indexService.getRootPath());
+
+    let selectedSkillIds: ProjectOverviewSkillId[] = [];
+    let selectionReason = "";
+    try {
+      const plan = await planProjectOverviewSkillSelection({
+        modelConfig,
+        workspaceRoot: this.indexService.getRootPath(),
+        projectObjective:
+          "Generate repository project overview JSON: projectGoal, implementationNarrative, startupEntry, startupFlow, keyModules, executionFlow, flowDiagram, uncertainty.",
+        contextSummary: buildOverviewPlannerContextSummary(dossier, index)
+      });
+      if (plan) {
+        selectedSkillIds = [plan.primarySkillId, ...plan.secondarySkillIds].slice(0, 2);
+        selectionReason = plan.reason;
+        this.output.appendLine(
+          `[overview-planner] primary=${plan.primarySkillId} secondary=${plan.secondarySkillIds.join(",") || "none"} reason=${compactLogText(plan.reason)}`
+        );
+      } else {
+        this.output.appendLine("[overview-planner] fallback=default_bundle reason=invalid_or_empty_plan");
+      }
+    } catch (error) {
+      this.output.appendLine(
+        `[overview-planner] fallback=default_bundle error=${compactLogText(String(error))}`
+      );
+    }
+
     const { systemInstruction, userPrompt } = buildProjectOverviewPrompt(language, dossier, index, {
-      modelName: modelConfig.model
+      modelName: modelConfig.model,
+      selectedSkillIds,
+      selectionReason
     });
     const adapter = createModelAdapter(modelConfig);
 
@@ -434,6 +464,35 @@ async function buildProjectOverviewDossier(
   };
 }
 
+function buildOverviewPlannerContextSummary(
+  dossier: ProjectOverviewDossier,
+  index: WorkspaceIndex
+): string {
+  const files = dossier.fileDossiers.map((item) => item.path).slice(0, 6).join(", ") || "none";
+  const entries = dossier.entryCandidates.slice(0, 4).join(", ") || "none";
+  const modules = dossier.coreModules.slice(0, 4).join(", ") || "none";
+
+  return [
+    `workspaceRevision=${index.snapshot.revision}`,
+    `primaryLanguage=${dossier.primaryLanguage}`,
+    `entryCandidates=${entries}`,
+    `coreModules=${modules}`,
+    `fileDossierCount=${dossier.fileDossiers.length}`,
+    `sampleFiles=${files}`,
+    `readmeAvailable=${dossier.readme.trim().length > 0}`,
+    `packageManifestAvailable=${dossier.packageManifest.trim().length > 0}`
+  ].join("\n");
+}
+
+function compactLogText(value: string, limit = 220): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, limit - 3)}...`;
+}
+
 function selectOverviewFiles(
   index: WorkspaceIndex,
   summary: ProjectSummary
@@ -564,7 +623,7 @@ export function safeParseJsonObject(content: string): Record<string, unknown> | 
   const trimmed = normalizeModelJsonText(content);
   const direct = parseJsonCandidate(trimmed);
   if (direct) {
-    return direct;
+    return unwrapProjectOverviewEnvelope(direct);
   }
 
   for (const block of extractMarkdownCodeBlocks(trimmed)) {

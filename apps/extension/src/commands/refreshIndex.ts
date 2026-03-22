@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { COMMANDS } from "@code-vibe/shared";
 
 import type { IndexService } from "../services/indexService";
 import type { ProjectOverviewService } from "../services/projectOverviewService";
@@ -9,7 +10,27 @@ export function registerRefreshIndexCommand(
   projectOverviewService: ProjectOverviewService
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("vibe.refreshIndex", async () => {
+    vscode.commands.registerCommand(COMMANDS.refreshIndex, async () => {
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Refreshing Vibe index",
+            cancellable: false
+          },
+          async (progress) => {
+            progress.report({ message: "Indexing workspace..." });
+            await indexService.refresh("manual");
+          }
+        );
+
+        vscode.window.showInformationMessage("Vibe index refreshed.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Failed to refresh Vibe index: ${message}`);
+      }
+    }),
+    vscode.commands.registerCommand(COMMANDS.refreshIndexAndOverview, async () => {
       try {
         await vscode.window.withProgress(
           {

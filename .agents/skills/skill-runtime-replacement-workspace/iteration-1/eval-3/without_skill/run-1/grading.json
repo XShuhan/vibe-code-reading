@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Skill id matches expected question type",
+      "passed": true,
+      "evidence": "skillId=RiskReviewSkill"
+    },
+    {
+      "text": "without_skill run falls back to default skill document behavior",
+      "passed": true,
+      "evidence": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: RiskReviewSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Identify concrete bugs, edge cases, and maintenance risks, then rank by impact and likelihood. Primary skill focus: Identify concrete bugs, edge cases, and maintenance risks. Skill document path: fallback-default Apply default style skills."
+    },
+    {
+      "text": "without_skill includes skill marker: Risk Register",
+      "passed": false,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: risk_review.\nActive skill bundle: RiskReviewSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branching, error handling, and boundary-related evidence.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Rank risks by impact and likelihood where possible.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. RiskReviewSkill\nDescription: Identify concrete bugs, edge cases, and maintenance risks, then rank by impact and likelihood.\nFocus: Identify concrete bugs, edge cases, and maintenance risks.\nSource: fallback-default\nUse condition -> failure -> impact format. Prioritize by severity and likelihood. Propose targeted mitigations.\nLearned skills: none yet.\nFull mode: provide complete analysis across all base sections.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nNo extra sections requested by user.\nFocused strictness: not applied."
+    },
+    {
+      "text": "without_skill prompt still preserves base output constraints",
+      "passed": true,
+      "evidence": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: risk_review.\nActive skill bundle: RiskReviewSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize branching, error handling, and boundary-related evidence.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Rank risks by impact and likelihood where possible.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. RiskReviewSkill\nDescription: Identify concrete bugs, edge cases, and maintenance risks, then rank by impact and likelihood.\nFocus: Identify concrete bugs, edge cases, and maintenance risks.\nSource: fallback-default\nUse condition -> failure -> impact format. Prioritize by severity and likelihood. Propose targeted mitigations.\nLearned skills: none yet.\nFull mode: provide complete analysis across all base sections.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nNo extra sections requested by user.\nFocused strictness: not applied."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  }
+}

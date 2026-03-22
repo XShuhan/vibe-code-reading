@@ -1,0 +1,35 @@
+{
+  "questionType": "input_output",
+  "skillId": "InputOutputSkill",
+  "systemInstruction": "You are Code Vibe Reading Agent, a code-reading assistant. Output should be practical, concrete, and grounded in evidence. Always lead with conclusions, then explain logic and principles. Separate facts, inferences, and uncertainty. Do not fabricate missing code behavior. Primary skill: InputOutputSkill. Secondary skills: none. Skill selection reason: not provided. Primary skill description: Explain input/output contracts and side effects for selected code with concrete evidence. Primary skill focus: Extract function inputs, outputs, side effects, and data contract assumptions. Skill document path: fallback-default Apply default style skills.",
+  "promptInstruction": "Respond with a strict JSON object only. Do not include markdown fences.\nJSON schema:\n{\n  \"sections\": [{\"title\":\"string\",\"content\":\"string\"}],\n  \"questionRestatement\": \"string (optional, can be empty)\",\n  \"conclusion\": \"string (optional, can be empty)\",\n  \"extraSections\": [{\"title\":\"string\",\"content\":\"string\"}]\n}\nThe `sections` array is primary. Include only sections directly useful for the user question (usually 2-4 sections).\nAvoid generic headings unless user asked for broad explanation.\nWrite each field with concrete, evidence-grounded statements.\nQuestion type: input_output.\nActive skill bundle: InputOutputSkill.\nSelection range: src/auth.ts:10-32.\nActive symbol: symbol:createSession.\nEvidence strategy (primary skill): Prioritize function signatures, parameter usage, return values, and IO boundaries.\nEvidence strategy (secondary skills): none.\nOutput style (primary skill): Use concise contract language and show edge-case input handling.\nOutput style (secondary skills): none.\nAuthoritative skill instructions (from SKILL.md body):\n1. InputOutputSkill\nDescription: Explain input/output contracts and side effects for selected code with concrete evidence.\nFocus: Extract function inputs, outputs, side effects, and data contract assumptions.\nSource: fallback-default\nState input requirements, output shape, and side effects. Keep contract statements grounded in code paths and error branches.\nLearned skills: none yet.\nFocused mode: prioritize only sections directly requested by user. Non-relevant base sections can be empty strings.\nNormal mode: keep questionRestatement/conclusion empty unless user explicitly asks for summary.\nUser-requested sections (required):\n1. Input / Output\nYou MUST include each requested title exactly in the `sections` array with non-empty content.\nSection title policy: `sections.title` must be exactly one of the requested titles listed above.\nIf a skill suggests sub-headings (for example Call Flow / Upstream / Downstream / Impact Analysis or Inputs / Outputs), keep those as structured bullets inside `content`, not as additional section titles.\nDo not move requested titles into `extraSections`.\nFocused strictness: sections MUST stay within requested section titles only: Input / Output.",
+  "prioritizedEvidence": [
+    {
+      "id": "evidence-1",
+      "workspaceId": "eval-workspace",
+      "path": "src/auth.ts",
+      "startLine": 10,
+      "endLine": 32,
+      "symbolId": "symbol:createSession",
+      "excerpt": "export function createSession(userId: string) { if (!userId) throw new Error('missing'); return issueToken(userId); }",
+      "score": 0.91,
+      "reason": "active symbol"
+    },
+    {
+      "id": "evidence-2",
+      "workspaceId": "eval-workspace",
+      "path": "src/token.ts",
+      "startLine": 4,
+      "endLine": 20,
+      "symbolId": "symbol:issueToken",
+      "excerpt": "export function issueToken(userId: string) { return sign(userId); }",
+      "score": 0.73,
+      "reason": "call graph"
+    }
+  ],
+  "requestedSections": [
+    "Input / Output"
+  ],
+  "focusMode": "focused",
+  "summaryMode": false
+}

@@ -1,4 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("vscode", () => {
+  class EventEmitter<T> {
+    private listeners = new Set<(value: T) => void>();
+
+    readonly event = (listener: (value: T) => void) => {
+      this.listeners.add(listener);
+      return {
+        dispose: () => {
+          this.listeners.delete(listener);
+        }
+      };
+    };
+
+    fire(value: T): void {
+      for (const listener of this.listeners) {
+        listener(value);
+      }
+    }
+  }
+
+  return {
+    EventEmitter
+  };
+});
 
 import {
   applyDeterministicOverviewFallback,

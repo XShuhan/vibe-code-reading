@@ -1,0 +1,11 @@
+{
+  "eval_id": 8,
+  "eval_name": "io-pseudocode-callflow-mixed",
+  "prompt": "解释输入输出，简化代码为伪代码，解释代码的调用链",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: Impact Analysis",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

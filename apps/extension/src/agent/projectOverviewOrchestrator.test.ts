@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { GeneratedProjectOverview } from "../services/projectOverviewService";
 import {
@@ -6,6 +10,8 @@ import {
   normalizeGeneratedProjectOverview,
   sanitizeGeneratedProjectOverview
 } from "./projectOverviewOrchestrator";
+
+const createdPaths: string[] = [];
 
 function makeOverview(overrides: Partial<GeneratedProjectOverview> = {}): GeneratedProjectOverview {
   return {
@@ -29,6 +35,123 @@ function makeOverview(overrides: Partial<GeneratedProjectOverview> = {}): Genera
     sourceFiles: [],
     ...overrides
   };
+}
+
+afterEach(async () => {
+  await Promise.all(
+    createdPaths.splice(0).map(async (targetPath) => {
+      await fs.rm(targetPath, { recursive: true, force: true });
+    })
+  );
+});
+
+function makeDossier() {
+  return {
+    primaryLanguage: "TypeScript",
+    coreDirectories: ["src"],
+    entryCandidates: ["src/index.ts"],
+    coreModules: ["src/runtime.ts"],
+    topFunctions: ["run @ src/runtime.ts (3)"],
+    readme: "sample readme",
+    packageManifest: "{ \"name\": \"demo\" }",
+    fileDossiers: [
+      {
+        path: "src/index.ts",
+        reason: "entry",
+        symbolOutline: "- function boot (1-10)",
+        excerpt: "export function boot() {}"
+      }
+    ]
+  };
+}
+
+function makeIndex(rootUri: string) {
+  return {
+    snapshot: {
+      id: "workspace_1",
+      rootUri,
+      revision: "deadbeef",
+      languageSet: ["typescript"],
+      indexedAt: "2026-03-19T00:00:00.000Z",
+      analyzerVersion: "0.1.0"
+    },
+    nodes: [],
+    edges: [],
+    fileContents: {}
+  };
+}
+
+async function createOverviewSkillWorkspace(): Promise<string> {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "overview-skill-workspace-"));
+  createdPaths.push(workspaceRoot);
+
+  const writeSkill = async (folder: string, content: string): Promise<void> => {
+    const skillDir = path.join(workspaceRoot, ".agents", "skills", folder);
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(path.join(skillDir, "SKILL.md"), content, "utf8");
+  };
+
+  await writeSkill(
+    "mission-skill",
+    [
+      "---",
+      "name: mission-skill",
+      "description: mission-skill-description-marker",
+      "---",
+      "",
+      "# Mission Skill",
+      "",
+      "## Core goals",
+      "",
+      "1. mission focus marker",
+      "",
+      "## Workflow",
+      "",
+      "- mission body marker"
+    ].join("\n")
+  );
+
+  await writeSkill(
+    "bootstrap-trace-skill",
+    [
+      "---",
+      "name: bootstrap-trace-skill",
+      "description: bootstrap-description-marker",
+      "---",
+      "",
+      "# Bootstrap Trace Skill",
+      "",
+      "## Core goals",
+      "",
+      "1. bootstrap focus marker",
+      "",
+      "## Workflow",
+      "",
+      "- bootstrap body marker"
+    ].join("\n")
+  );
+
+  await writeSkill(
+    "execution-flow-skill",
+    [
+      "---",
+      "name: execution-flow-skill",
+      "description: execution-description-marker",
+      "---",
+      "",
+      "# Execution Flow Skill",
+      "",
+      "## Core goals",
+      "",
+      "1. execution focus marker",
+      "",
+      "## Workflow",
+      "",
+      "- execution body marker"
+    ].join("\n")
+  );
+
+  return workspaceRoot;
 }
 
 describe("projectOverviewOrchestrator", () => {
@@ -139,6 +262,62 @@ describe("projectOverviewOrchestrator", () => {
 
     expect(prompt.userPrompt).toContain("If code excerpts are present in the dossier, do not say that source code was missing.");
     expect(prompt.userPrompt).toContain("Provided code excerpts: 1");
+  });
+
+  it("loads overview skills from .agents when skill docs exist", async () => {
+    const workspaceRoot = await createOverviewSkillWorkspace();
+    const prompt = buildProjectOverviewPrompt("en", makeDossier(), makeIndex(workspaceRoot));
+
+    expect(prompt.userPrompt).toContain("mission-skill-description-marker");
+    expect(prompt.userPrompt).toContain("mission focus marker");
+    expect(prompt.userPrompt).toContain("bootstrap body marker");
+    expect(prompt.userPrompt).toContain("execution body marker");
+    expect(prompt.userPrompt).toContain(
+      path.join(workspaceRoot, ".agents", "skills", "mission-skill", "SKILL.md")
+    );
+  });
+
+  it("injects only selected overview skills when selectedSkillIds is provided", async () => {
+    const workspaceRoot = await createOverviewSkillWorkspace();
+    const prompt = buildProjectOverviewPrompt("en", makeDossier(), makeIndex(workspaceRoot), {
+      selectedSkillIds: ["MissionSkill", "ExecutionFlowSkill"],
+      selectionReason: "mission + runtime flow are enough for this repository"
+    });
+
+    expect(prompt.userPrompt).toContain("1. MissionSkill");
+    expect(prompt.userPrompt).toContain("2. ExecutionFlowSkill");
+    expect(prompt.userPrompt).toContain("Skill selection rationale: mission + runtime flow are enough for this repository");
+    expect(prompt.userPrompt).not.toContain("BootstrapTraceSkill");
+    expect(prompt.userPrompt).not.toContain("bootstrap body marker");
+  });
+
+  it("falls back when overview skill docs are missing", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "overview-skill-fallback-"));
+    createdPaths.push(workspaceRoot);
+    const prompt = buildProjectOverviewPrompt("en", makeDossier(), makeIndex(workspaceRoot));
+
+    expect(prompt.userPrompt).toContain(
+      "Focus: Explain what the project is for, who it serves, and the main user-facing outcome."
+    );
+    expect(prompt.userPrompt).toContain("Source: fallback-default");
+  });
+
+  it("keeps glm5 strict schema instructions unchanged after skill injection", async () => {
+    const workspaceRoot = await createOverviewSkillWorkspace();
+    const prompt = buildProjectOverviewPrompt(
+      "en",
+      makeDossier(),
+      makeIndex(workspaceRoot),
+      {
+        modelName: "glm-5"
+      }
+    );
+
+    expect(prompt.userPrompt).toContain("Important for this model:");
+    expect(prompt.userPrompt).toContain("You must use exactly these top-level keys and no others");
+    expect(prompt.userPrompt).toContain("Do not output alternative schemas such as project_identity");
+    expect(prompt.userPrompt).toContain("execution-description-marker");
+    expect(prompt.systemInstruction).toContain("strict schema compliance");
   });
 
   it("adds stricter schema instructions for glm-5", () => {

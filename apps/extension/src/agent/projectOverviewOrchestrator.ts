@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import type { WorkspaceIndex } from "@code-vibe/shared";
 
 import type {
@@ -31,26 +34,152 @@ const GLM5_PROJECT_OVERVIEW_SYSTEM_PROMPT_ADDON = [
   "Do not use placeholders like Unknown or Likely unless the dossier truly lacks evidence, and then explain that in uncertainty."
 ].join(" ");
 
-const PROJECT_OVERVIEW_SKILLS = [
+export type ProjectOverviewSkillId = "MissionSkill" | "BootstrapTraceSkill" | "ExecutionFlowSkill";
+
+export interface ProjectOverviewSkillDefinition {
+  id: ProjectOverviewSkillId;
+  focus: string;
+  skillDocDescription: string;
+  skillDocBody: string;
+  skillDocPath?: string;
+}
+
+type ProjectOverviewSkillMapping = {
+  id: ProjectOverviewSkillId;
+  folder: string;
+  fallback: Omit<ProjectOverviewSkillDefinition, "id">;
+};
+
+const PROJECT_OVERVIEW_SKILL_MAPPINGS: readonly ProjectOverviewSkillMapping[] = [
   {
     id: "MissionSkill",
-    focus: "Explain what the project is for, who it serves, and the main user-facing outcome."
+    folder: "mission-skill",
+    fallback: {
+      focus: "Explain what the project is for, who it serves, and the main user-facing outcome.",
+      skillDocDescription:
+        "Clarify project mission, user value, and the concrete outcome the repository delivers.",
+      skillDocBody:
+        "State project mission first, then user-facing value and concrete outcome. Keep claims grounded in dossier files and avoid abstract architecture slogans."
+    }
   },
   {
     id: "BootstrapTraceSkill",
-    focus:
-      "Identify likely startup entry files, the bootstrap path, and the key functions/modules involved in bringing the project up."
+    folder: "bootstrap-trace-skill",
+    fallback: {
+      focus:
+        "Identify likely startup entry files, the bootstrap path, and the key functions/modules involved in bringing the project up.",
+      skillDocDescription:
+        "Trace startup entry points and bootstrap sequence with explicit code-level grounding.",
+      skillDocBody:
+        "Locate strongest startup entry candidate, explain initialization steps in order, and cite concrete files/symbols for each step. Mark ambiguity explicitly."
+    }
   },
   {
     id: "ExecutionFlowSkill",
-    focus:
-      "Turn the startup path and core request/render loop into a readable flow diagram with grounded step descriptions."
+    folder: "execution-flow-skill",
+    fallback: {
+      focus:
+        "Turn the startup path and core request/render loop into a readable flow diagram with grounded step descriptions.",
+      skillDocDescription:
+        "Map runtime execution flow from input to output with step linkage and flowchart-ready nodes.",
+      skillDocBody:
+        "Build chronological runtime steps after startup, ensure each step has file-level evidence, and connect steps with `next` edges that can render as a Mermaid flowchart."
+    }
   }
-] as const;
+];
+
+const PROJECT_OVERVIEW_SKILL_CACHE = new Map<string, ProjectOverviewSkillDefinition[]>();
 
 export interface ProjectOverviewPromptPackage {
   systemInstruction: string;
   userPrompt: string;
+}
+
+export function resolveProjectOverviewSkills(workspaceRoot: string): ProjectOverviewSkillDefinition[] {
+  const cached = PROJECT_OVERVIEW_SKILL_CACHE.get(workspaceRoot);
+  if (cached) {
+    return cached;
+  }
+
+  const resolved = PROJECT_OVERVIEW_SKILL_MAPPINGS.map((mapping) => {
+    const fallback: ProjectOverviewSkillDefinition = {
+      id: mapping.id,
+      ...mapping.fallback
+    };
+    const docPath = path.join(workspaceRoot, ".agents", "skills", mapping.folder, "SKILL.md");
+    if (!fs.existsSync(docPath)) {
+      return fallback;
+    }
+
+    return loadProjectOverviewSkillFromMarkdown(mapping.id, docPath, fallback);
+  });
+
+  PROJECT_OVERVIEW_SKILL_CACHE.set(workspaceRoot, resolved);
+  return resolved;
+}
+
+function loadProjectOverviewSkillFromMarkdown(
+  id: ProjectOverviewSkillId,
+  docPath: string,
+  fallback: ProjectOverviewSkillDefinition
+): ProjectOverviewSkillDefinition {
+  let raw = "";
+  try {
+    raw = fs.readFileSync(docPath, "utf8");
+  } catch {
+    return fallback;
+  }
+
+  const parsed = parseSkillMarkdown(raw);
+  if (!parsed) {
+    return fallback;
+  }
+
+  return {
+    ...fallback,
+    id,
+    focus: extractPrimaryGoal(parsed.body) ?? fallback.focus,
+    skillDocDescription: parsed.description || fallback.skillDocDescription,
+    skillDocBody: parsed.body || fallback.skillDocBody,
+    skillDocPath: docPath
+  };
+}
+
+function parseSkillMarkdown(input: string): {
+  description: string;
+  body: string;
+} | null {
+  const frontmatterMatch = input.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!frontmatterMatch) {
+    return null;
+  }
+
+  const frontmatterRaw = frontmatterMatch[1] ?? "";
+  const body = input.slice(frontmatterMatch[0].length).trim();
+  const descriptionMatch = frontmatterRaw.match(/^\s*description:\s*(.+)\s*$/m);
+
+  return {
+    description: (descriptionMatch?.[1] ?? "").trim().replace(/^["']|["']$/g, ""),
+    body
+  };
+}
+
+function extractPrimaryGoal(body: string): string | undefined {
+  const coreGoalsMatch = body.match(/##\s*Core goals\s*([\s\S]*?)(?:\n##\s|\n#\s|$)/i);
+  if (!coreGoalsMatch) {
+    return undefined;
+  }
+
+  const lines = (coreGoalsMatch[1] ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const firstGoal = lines.find((line) => /^\d+\.\s+/.test(line) || /^-\s+/.test(line));
+  if (!firstGoal) {
+    return undefined;
+  }
+
+  return firstGoal.replace(/^\d+\.\s+/, "").replace(/^-\s+/, "").trim();
 }
 
 export function buildProjectOverviewPrompt(
@@ -59,6 +188,8 @@ export function buildProjectOverviewPrompt(
   index: WorkspaceIndex,
   options?: {
     modelName?: string;
+    selectedSkillIds?: ProjectOverviewSkillId[];
+    selectionReason?: string;
   }
 ): ProjectOverviewPromptPackage {
   const languageInstruction =
@@ -104,9 +235,22 @@ export function buildProjectOverviewPrompt(
     "}"
   ].join("\n");
 
-  const skillSection = PROJECT_OVERVIEW_SKILLS.map(
-    (skill, indexPosition) => `${indexPosition + 1}. ${skill.id}: ${skill.focus}`
-  ).join("\n");
+  const overviewSkills = selectProjectOverviewSkills(
+    resolveProjectOverviewSkills(index.snapshot.rootUri),
+    options?.selectedSkillIds
+  );
+  const skillSection = overviewSkills
+    .map((skill, indexPosition) =>
+      [
+        `${indexPosition + 1}. ${skill.id}`,
+        `Description: ${skill.skillDocDescription}`,
+        `Focus: ${skill.focus}`,
+        "Instructions:",
+        skill.skillDocBody,
+        skill.skillDocPath ? `Source: ${skill.skillDocPath}` : "Source: fallback-default"
+      ].join("\n")
+    )
+    .join("\n\n");
   const modelName = options?.modelName?.trim() ?? "";
   const systemInstruction = isGlm5Model(modelName)
     ? `${PROJECT_OVERVIEW_SYSTEM_PROMPT} ${GLM5_PROJECT_OVERVIEW_SYSTEM_PROMPT_ADDON}`
@@ -179,6 +323,9 @@ export function buildProjectOverviewPrompt(
     languageInstruction,
     "Use the following local skill bundle while reasoning:",
     skillSection,
+    options?.selectionReason?.trim()
+      ? `Skill selection rationale: ${options.selectionReason.trim()}`
+      : "Skill selection rationale: not provided (default bundle applied).",
     "",
     "Return a strict JSON object only. Do not wrap it in markdown fences.",
     "Do not add any prose before or after the JSON object.",
@@ -207,6 +354,22 @@ export function buildProjectOverviewPrompt(
     systemInstruction,
     userPrompt
   };
+}
+
+function selectProjectOverviewSkills(
+  skills: ProjectOverviewSkillDefinition[],
+  selectedSkillIds?: ProjectOverviewSkillId[]
+): ProjectOverviewSkillDefinition[] {
+  if (!selectedSkillIds || selectedSkillIds.length === 0) {
+    return skills;
+  }
+
+  const deduped = Array.from(new Set(selectedSkillIds)).slice(0, 2);
+  const filtered = deduped
+    .map((skillId) => skills.find((skill) => skill.id === skillId))
+    .filter((skill): skill is ProjectOverviewSkillDefinition => Boolean(skill));
+
+  return filtered.length > 0 ? filtered : skills;
 }
 
 function isGlm5Model(modelName: string): boolean {
@@ -599,6 +762,16 @@ function areFlowSectionsRedundant(
     return false;
   }
 
+  // Keep execution flow when it provides additional runtime steps beyond startup.
+  if (executionFlow.length > startupFlow.length) {
+    return false;
+  }
+
+  const concreteExecutionFiles = executionFlow.filter((node) => isConcretePath(node.file)).length;
+  if (concreteExecutionFiles < Math.min(2, executionFlow.length)) {
+    return false;
+  }
+
   const startupKeys = new Set(
     startupFlow.map((step) => `${normalizePath(step.file)}|${normalizeText(step.title)}`)
   );
@@ -695,4 +868,12 @@ function normalizePath(value: string): string {
 
 function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isConcretePath(value: string): boolean {
+  const normalized = value.trim();
+  return (
+    Boolean(normalized) &&
+    !/(unknown|inferred|likely|candidate|not provided|未提供|推断|候选)/i.test(normalized)
+  );
 }

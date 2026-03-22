@@ -5,6 +5,7 @@ import type { EditorSelectionState, Thread } from "@code-vibe/shared";
 
 import { ensureModelConfigured } from "../config/settings";
 import { getActiveSelectionState } from "../editor/selectionContext";
+import type { CodeThreadMappingService } from "../services/codeThreadMappingService";
 import type { IndexService } from "../services/indexService";
 import type { ThreadService } from "../services/threadService";
 import type { VibeController } from "../services/vibeController";
@@ -17,6 +18,7 @@ type PanelHydrationPayload = {
 
 type InlineHydrationPayload = {
   draft: string;
+  cursorPrefix: string;
 };
 
 type ComposerMessage =
@@ -52,6 +54,7 @@ type SelectionSnapshot = {
   editor: vscode.TextEditor;
   editorState: EditorSelectionState;
   insetLine: number;
+  cursorPrefix: string;
 };
 
 type WebviewEditorInsetLike = {
@@ -68,14 +71,16 @@ type CreateWebviewTextEditorInset = (
 ) => WebviewEditorInsetLike;
 
 const INLINE_INSET_HEIGHT = 4;
+const DEFAULT_INLINE_QUESTION = "解释这段代码的作用";
 
 export function registerAskAboutSelectionCommand(
   context: vscode.ExtensionContext,
   indexService: IndexService,
   threadService: ThreadService,
+  mappingService: CodeThreadMappingService,
   controller: VibeController
 ): void {
-  const composer = createSelectionComposer(context, indexService, threadService, controller);
+  const composer = createSelectionComposer(context, indexService, threadService, mappingService, controller);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(COMMANDS.askAboutSelection, async () => {
@@ -88,6 +93,7 @@ export async function askAboutSelection(
   context: vscode.ExtensionContext,
   indexService: IndexService,
   threadService: ThreadService,
+  mappingService: CodeThreadMappingService,
   controller: VibeController,
   overrideQuestion?: string
 ): Promise<Thread | undefined> {
@@ -103,7 +109,7 @@ export async function askAboutSelection(
   }
 
   try {
-    return await executeAskAboutSelection(context, threadService, controller, editorState, question);
+    return await executeAskAboutSelection(context, threadService, mappingService, controller, editorState, question);
   } catch (error) {
     vscode.window.showErrorMessage(String(error));
     return undefined;
@@ -114,20 +120,23 @@ function createSelectionComposer(
   context: vscode.ExtensionContext,
   indexService: IndexService,
   threadService: ThreadService,
+  mappingService: CodeThreadMappingService,
   controller: VibeController
 ): {
   open: () => Promise<void>;
 } {
-  const fallbackComposer = createPanelComposer(context, threadService, controller);
+  const fallbackComposer = createPanelComposer(context, threadService, mappingService, controller);
 
   let inlineInset: WebviewEditorInsetLike | undefined;
   let inlineSnapshot: EditorSelectionState | null = null;
   let inlineEditor: vscode.TextEditor | null = null;
   let inlineInsetLine = 0;
   let inlineDraft = "";
+  let inlineCursorPrefix = "";
   let inlinePendingHydration: InlineHydrationPayload | null = null;
   let inlineReady = false;
   let inlineInFlight = false;
+  let inlineSessionDisposables: vscode.Disposable[] = [];
 
   const open = async (): Promise<void> => {
     const snapshot = captureSelectionSnapshot(indexService);
@@ -157,12 +166,16 @@ function createSelectionComposer(
     inlineSnapshot = snapshot.editorState;
     inlineEditor = snapshot.editor;
     inlineInsetLine = snapshot.insetLine;
-    inlineDraft = "";
+    inlineCursorPrefix = snapshot.cursorPrefix;
+    inlineDraft = DEFAULT_INLINE_QUESTION;
 
     const opened = await createInlineInset();
     if (!opened) {
       resetInlineSession();
+      return false;
     }
+
+    registerInlineAutoClose(snapshot.editor);
     return opened;
   };
 
@@ -172,7 +185,7 @@ function createSelectionComposer(
       return false;
     }
 
-    inlinePendingHydration = { draft: inlineDraft };
+    inlinePendingHydration = { draft: inlineDraft, cursorPrefix: inlineCursorPrefix };
     inlineReady = false;
 
     try {
@@ -252,9 +265,21 @@ function createSelectionComposer(
 
         inlineInFlight = true;
         try {
-          const thread = await executeAskAboutSelection(context, threadService, controller, inlineSnapshot, question);
+          const thread = await executeAskAboutSelection(
+            context,
+            threadService,
+            mappingService,
+            controller,
+            inlineSnapshot,
+            question,
+            {
+              onThreadCreated: () => {
+                inset.dispose();
+              }
+            }
+          );
           if (thread) {
-            inset.dispose();
+            return;
           }
         } catch (error) {
           const errorText = String(error);
@@ -277,14 +302,58 @@ function createSelectionComposer(
   };
 
   const resetInlineSession = (): void => {
+    disposeInlineSessionDisposables();
     inlineInset = undefined;
     inlineSnapshot = null;
     inlineEditor = null;
     inlineInsetLine = 0;
     inlineDraft = "";
+    inlineCursorPrefix = "";
     inlinePendingHydration = null;
     inlineReady = false;
     inlineInFlight = false;
+  };
+
+  const disposeInlineSessionDisposables = (): void => {
+    if (inlineSessionDisposables.length === 0) {
+      return;
+    }
+
+    vscode.Disposable.from(...inlineSessionDisposables).dispose();
+    inlineSessionDisposables = [];
+  };
+
+  const registerInlineAutoClose = (editor: vscode.TextEditor): void => {
+    disposeInlineSessionDisposables();
+    inlineSessionDisposables = [
+      vscode.window.onDidChangeTextEditorSelection((event) => {
+        if (!inlineInset) {
+          return;
+        }
+
+        if (event.textEditor === editor) {
+          inlineInset.dispose();
+        }
+      }),
+      vscode.window.onDidChangeActiveTextEditor((activeEditor) => {
+        if (!inlineInset) {
+          return;
+        }
+
+        if (!activeEditor || activeEditor !== editor) {
+          inlineInset.dispose();
+        }
+      }),
+      vscode.window.onDidChangeWindowState((state) => {
+        if (!inlineInset) {
+          return;
+        }
+
+        if (!state.focused) {
+          inlineInset.dispose();
+        }
+      })
+    ];
   };
 
   return { open };
@@ -293,6 +362,7 @@ function createSelectionComposer(
 function createPanelComposer(
   context: vscode.ExtensionContext,
   threadService: ThreadService,
+  mappingService: CodeThreadMappingService,
   controller: VibeController
 ): {
   open: (editorState: EditorSelectionState) => Promise<void>;
@@ -394,9 +464,21 @@ function createPanelComposer(
 
         inFlight = true;
         try {
-          const thread = await executeAskAboutSelection(context, threadService, controller, editorStateSnapshot, question);
+          const thread = await executeAskAboutSelection(
+            context,
+            threadService,
+            mappingService,
+            controller,
+            editorStateSnapshot,
+            question,
+            {
+              onThreadCreated: () => {
+                panel?.dispose();
+              }
+            }
+          );
           if (thread) {
-            panel.dispose();
+            return;
           }
         } catch (error) {
           const errorText = String(error);
@@ -436,11 +518,26 @@ function captureSelectionSnapshot(indexService: IndexService): SelectionSnapshot
     return null;
   }
 
+  const active = editor.selection.active;
+
   return {
     editor,
     editorState,
-    insetLine: Math.max(0, editor.selection.start.line - 1)
+    insetLine: Math.max(0, Math.min(editor.document.lineCount - 1, active.line)),
+    cursorPrefix: getCursorPrefixForAnchor(editor)
   };
+}
+
+function getCursorPrefixForAnchor(editor: vscode.TextEditor): string {
+  const active = editor.selection.active;
+  const line = editor.document.lineAt(active.line).text;
+  const rawPrefix = line.slice(0, Math.min(active.character, line.length));
+  const tabSizeOption = editor.options.tabSize;
+  const tabSize =
+    typeof tabSizeOption === "number" && Number.isFinite(tabSizeOption)
+      ? Math.max(1, Math.floor(tabSizeOption))
+      : 4;
+  return rawPrefix.replace(/\t/g, " ".repeat(tabSize));
 }
 
 function getCreateWebviewTextEditorInset(): CreateWebviewTextEditorInset | undefined {
@@ -454,9 +551,13 @@ function getCreateWebviewTextEditorInset(): CreateWebviewTextEditorInset | undef
 async function executeAskAboutSelection(
   context: vscode.ExtensionContext,
   threadService: ThreadService,
+  mappingService: CodeThreadMappingService,
   controller: VibeController,
   editorState: EditorSelectionState,
-  question: string
+  question: string,
+  options?: {
+    onThreadCreated?: () => void;
+  }
 ): Promise<Thread | undefined> {
   const modelConfig = await ensureModelConfigured(context, "ask");
   if (!modelConfig) {
@@ -466,8 +567,10 @@ async function executeAskAboutSelection(
   const thread = await threadService.askQuestion(question, editorState, modelConfig, {
     onThreadCreated: async (createdThread) => {
       await controller.openThread(createdThread.id);
+      options?.onThreadCreated?.();
     }
   });
+  await mappingService.addThreadMapping(thread.id, editorState);
   return thread;
 }
 
@@ -476,7 +579,7 @@ function buildPanelHydrationPayload(editorState: EditorSelectionState): PanelHyd
     suggestion: editorState.selectedText
       ? "Explain this code and its surrounding behavior"
       : "Explain the current symbol",
-    contextLabel: `${editorState.activeFile}:${editorState.startLine}-${editorState.endLine}`,
+    contextLabel: `${editorState.activeFile}:${editorState.startLine}:${editorState.startColumn}-${editorState.endLine}:${editorState.endColumn}`,
     selectionPreview: compactSelectionPreview(editorState.selectedText)
   };
 }
@@ -509,7 +612,9 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
     <style>
       :root {
         color-scheme: light dark;
-        --inline-right-safe: 120px;
+        --card-min-width: 300px;
+        --card-max-width: 720px;
+        --card-outer-gap: 14px;
       }
 
       * {
@@ -518,55 +623,57 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
 
       body {
         margin: 0;
-        padding: 8px 10px;
+        padding: 4px 6px;
         overflow: hidden;
         font-family: var(--vscode-font-family);
         color: var(--vscode-editor-foreground);
-        background: var(--vscode-editor-background);
+        background: transparent;
       }
 
       .shell {
-        display: grid;
-        gap: 6px;
-        width: calc(100% - var(--inline-right-safe));
-        max-width: calc(100% - var(--inline-right-safe));
-        min-width: 320px;
-        margin-right: var(--inline-right-safe);
+        width: 100%;
+        min-width: 0;
       }
 
-      @media (max-width: 520px) {
-        .shell {
-          width: 100%;
-          max-width: 100%;
-          min-width: 0;
-          margin-right: 0;
-        }
-      }
-
-      .row {
+      .card {
         display: flex;
         align-items: center;
         gap: 8px;
+        width: min(var(--card-min-width), calc(100vw - var(--card-outer-gap) * 2));
+        max-width: calc(100vw - var(--card-outer-gap) * 2);
+        margin-left: 0;
+        border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
+        border-radius: 10px;
+        padding: 6px 8px;
+        background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
       }
 
       input[type="text"] {
         flex: 1;
         min-width: 0;
-        height: 34px;
+        height: 30px;
         border: 1px solid var(--vscode-input-border);
         border-radius: 8px;
         padding: 0 10px;
-        font: inherit;
+        font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+        font-size: var(--vscode-editor-font-size, 13px);
+        font-weight: var(--vscode-editor-font-weight, 400);
         color: var(--vscode-input-foreground);
         background: var(--vscode-input-background);
       }
 
+      input[type="text"].hasError {
+        border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+      }
+
       button {
+        flex: 0 0 auto;
         border: 1px solid var(--vscode-button-border);
         background: var(--vscode-button-background);
         color: var(--vscode-button-foreground);
         border-radius: 6px;
-        height: 34px;
+        height: 30px;
         padding: 0 12px;
         font: inherit;
         white-space: nowrap;
@@ -582,33 +689,106 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
         cursor: not-allowed;
       }
 
-      .error {
-        min-height: 14px;
-        margin: 0;
-        color: var(--vscode-errorForeground);
-        font-size: 11px;
-        line-height: 1.2;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      .measure {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+        visibility: hidden;
+        pointer-events: none;
+        white-space: pre;
+        font: inherit;
       }
     </style>
   </head>
   <body>
     <main class="shell">
-      <div class="row">
+      <div class="card" id="composerCard">
         <input id="questionInput" type="text" placeholder="Press Enter to send, Esc to cancel" />
         <button id="sendButton" type="button">Send</button>
       </div>
-      <p class="error" id="errorText"></p>
+      <span id="inputMeasure" class="measure"></span>
+      <span id="anchorMeasure" class="measure"></span>
     </main>
 
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
+      const composerCard = document.getElementById("composerCard");
       const questionInput = document.getElementById("questionInput");
       const sendButton = document.getElementById("sendButton");
-      const errorText = document.getElementById("errorText");
+      const inputMeasure = document.getElementById("inputMeasure");
+      const anchorMeasure = document.getElementById("anchorMeasure");
       let isSending = false;
+      let isComposing = false;
+      let cursorPrefix = "";
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+      }
+
+      function readPxVariable(name, fallback) {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const value = Number.parseFloat(raw);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function clearInlineError() {
+        questionInput.classList.remove("hasError");
+        questionInput.removeAttribute("title");
+      }
+
+      function setInlineError(message) {
+        if (!message) {
+          return;
+        }
+        questionInput.classList.add("hasError");
+        questionInput.setAttribute("title", message);
+      }
+
+      function syncMeasureStyle() {
+        const inputStyles = getComputedStyle(questionInput);
+        for (const measure of [inputMeasure, anchorMeasure]) {
+          measure.style.font = inputStyles.font;
+          measure.style.letterSpacing = inputStyles.letterSpacing;
+          measure.style.fontKerning = inputStyles.fontKerning;
+        }
+      }
+
+      function syncComposerWidth() {
+        const outerGap = readPxVariable("--card-outer-gap", 14);
+        const configuredMin = readPxVariable("--card-min-width", 300);
+        const configuredMax = readPxVariable("--card-max-width", 720);
+        const availableWidth = Math.max(220, window.innerWidth - outerGap * 2);
+        const minWidth = Math.min(configuredMin, availableWidth);
+        const maxWidth = Math.max(minWidth, Math.min(configuredMax, availableWidth));
+
+        inputMeasure.textContent = questionInput.value || questionInput.placeholder || " ";
+        const contentWidth = Math.ceil(inputMeasure.getBoundingClientRect().width);
+        const chromeWidth = sendButton.getBoundingClientRect().width + 56;
+        const nextWidth = clamp(contentWidth + chromeWidth, minWidth, maxWidth);
+        composerCard.style.width = nextWidth + "px";
+      }
+
+      function syncAnchorOffset() {
+        const outerGap = readPxVariable("--card-outer-gap", 14);
+        const configuredMin = readPxVariable("--card-min-width", 300);
+        const availableWidth = Math.max(220, window.innerWidth - outerGap * 2);
+        const fallbackWidth = Math.min(configuredMin, availableWidth);
+        const cardWidth = composerCard.getBoundingClientRect().width || fallbackWidth;
+        const gutterGuess = 16;
+
+        anchorMeasure.textContent = cursorPrefix || "";
+        const prefixWidth = Math.ceil(anchorMeasure.getBoundingClientRect().width);
+        const targetLeft = prefixWidth + gutterGuess;
+        const maxLeft = Math.max(0, availableWidth - cardWidth);
+        const nextLeft = clamp(targetLeft, 0, maxLeft);
+        composerCard.style.marginLeft = nextLeft + "px";
+      }
+
+      function syncLayout() {
+        syncMeasureStyle();
+        syncComposerWidth();
+        syncAnchorOffset();
+      }
 
       function setSending(next) {
         isSending = next;
@@ -622,11 +802,11 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
 
         const question = questionInput.value.trim();
         if (!question) {
-          errorText.textContent = "Type a question before sending.";
+          setInlineError("Type a question before sending.");
           return;
         }
 
-        errorText.textContent = "";
+        clearInlineError();
         setSending(true);
         vscode.postMessage({
           type: "submit",
@@ -635,14 +815,26 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
       }
 
       sendButton.addEventListener("click", submitQuestion);
+
       questionInput.addEventListener("input", () => {
-        if (errorText.textContent) {
-          errorText.textContent = "";
-        }
+        clearInlineError();
+        syncLayout();
+      });
+
+      questionInput.addEventListener("compositionstart", () => {
+        isComposing = true;
+      });
+
+      questionInput.addEventListener("compositionend", () => {
+        isComposing = false;
       });
 
       questionInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
+          if (isComposing || event.isComposing) {
+            return;
+          }
+
           event.preventDefault();
           submitQuestion();
           return;
@@ -661,25 +853,30 @@ function renderInlineComposerHtml(webview: vscode.Webview): string {
         }
       });
 
+      window.addEventListener("resize", syncLayout);
+
       window.addEventListener("message", (event) => {
         const message = event.data;
 
         if (message.type === "hydrate") {
           questionInput.value = message.payload.draft || "";
+          cursorPrefix = typeof message.payload.cursorPrefix === "string" ? message.payload.cursorPrefix : "";
           setSending(false);
-          errorText.textContent = "";
+          clearInlineError();
+          syncLayout();
           questionInput.focus();
-          questionInput.setSelectionRange(questionInput.value.length, questionInput.value.length);
+          questionInput.setSelectionRange(0, questionInput.value.length);
         }
 
         if (message.type === "submitResult") {
           if (!message.payload.ok) {
-            errorText.textContent = message.payload.error || "Failed to send question.";
+            setInlineError(message.payload.error || "Failed to send question.");
             setSending(false);
           }
         }
       });
 
+      syncLayout();
       vscode.postMessage({ type: "ready" });
     </script>
   </body>

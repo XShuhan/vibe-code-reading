@@ -1,0 +1,11 @@
+{
+  "eval_id": 1,
+  "eval_name": "call-flow",
+  "prompt": "这个函数的调用链是什么，谁调用它，它又调用谁？",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: Impact Analysis",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

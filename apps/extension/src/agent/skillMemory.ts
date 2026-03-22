@@ -62,15 +62,50 @@ export class SkillMemoryBank {
 }
 
 function isPromotableAnswer(answer: StructuredThreadAnswer): boolean {
+  const sectionText = collectSectionText(answer);
+  const hasUsefulBody =
+    answer.codeBehavior.trim().length > 80 ||
+    answer.callFlow.trim().length > 80 ||
+    sectionText.length > 120;
+  const hasSummary =
+    answer.conclusion.trim().length > 24 ||
+    answer.questionRestatement.trim().length > 24 ||
+    (answer.sections?.length ?? 0) > 0;
+
   return (
-    answer.conclusion.trim().length > 24 &&
-    answer.codeBehavior.trim().length > 80 &&
+    hasSummary &&
+    hasUsefulBody &&
     !/not enough grounded evidence/i.test(answer.conclusion)
   );
 }
 
 function distillInstruction(answer: StructuredThreadAnswer): string {
   const hints: string[] = [];
+  const sectionLookup = new Map<string, string>(
+    [...(answer.sections ?? []), ...(answer.extraSections ?? [])].map((section) => [
+      section.title.toLowerCase().replace(/\s+/g, " ").trim(),
+      section.content
+    ])
+  );
+
+  if (sectionLookup.has("input / output")) {
+    hints.push("State clear input/output contracts, including return shape and side effects.");
+  }
+  if (sectionLookup.has("simplified pseudocode")) {
+    hints.push("Provide concise pseudocode that preserves guard conditions and branch order.");
+  }
+  if (sectionLookup.has("performance considerations")) {
+    hints.push("Identify dominant cost paths and explain practical optimization tradeoffs.");
+  }
+  if (sectionLookup.has("concurrency / state")) {
+    hints.push("Call out async boundaries, shared state transitions, and race windows.");
+  }
+  if (sectionLookup.has("testing notes")) {
+    hints.push("Propose targeted tests for happy path, edge cases, and failure handling.");
+  }
+  if (sectionLookup.has("refactor suggestions")) {
+    hints.push("Suggest incremental refactors with behavior-preserving migration steps.");
+  }
 
   if (containsStepStyle(answer.codeBehavior)) {
     hints.push("Describe code behavior in ordered steps.");
@@ -94,5 +129,12 @@ function distillInstruction(answer: StructuredThreadAnswer): string {
 
 function containsStepStyle(text: string): boolean {
   return /(?:^|\s)(?:\d+[.)]|first|second|third|then)\s/i.test(text);
+}
+
+function collectSectionText(answer: StructuredThreadAnswer): string {
+  return [...(answer.sections ?? []), ...(answer.extraSections ?? [])]
+    .map((section) => `${section.title}\n${section.content}`)
+    .join("\n")
+    .trim();
 }
 

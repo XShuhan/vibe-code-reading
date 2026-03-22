@@ -4,14 +4,18 @@ import { COMMANDS, VIEWS } from "@code-vibe/shared";
 import { createWorkspacePersistence, ensureWorkspaceStorage } from "@code-vibe/persistence";
 
 import { VibeCodeLensProvider } from "./editor/codeLensProvider";
+import { ThreadCodeLensProvider } from "./editor/threadCodeLensProvider";
+import { ThreadMarkerDecorations } from "./editor/threadMarkerDecorations";
 import { openCitation } from "./editor/sourceJump";
 import { registerAddThreadAnswerToCanvasCommand } from "./commands/addThreadAnswerToCanvas";
 import { registerAskAboutSelectionCommand } from "./commands/askAboutSelection";
 import { registerConfigureModelCommand } from "./commands/configureModel";
 import { registerDeleteThreadCommand } from "./commands/deleteThread";
 import { registerExplainCurrentSymbolCommand } from "./commands/explainCurrentSymbol";
+import { registerGoToCodeFromThreadCommand } from "./commands/goToCodeFromThread";
 import { registerOpenCanvasCommand } from "./commands/openCanvas";
 import { registerOpenProjectOverviewCommand } from "./commands/openProjectOverview";
+import { registerOpenThreadFromCodeCommand } from "./commands/openThreadFromCode";
 import { registerRefreshIndexCommand } from "./commands/refreshIndex";
 import { registerSaveSelectionAsCardCommand } from "./commands/saveSelectionAsCard";
 import { registerTestModelConnectionCommand } from "./commands/testModelConnection";
@@ -19,6 +23,7 @@ import { registerTraceCallPathCommand } from "./commands/traceCallPath";
 import { promptForInitialModelSetup } from "./config/settings";
 import { CardService } from "./services/cardService";
 import { CanvasService } from "./services/canvasService";
+import { CodeThreadMappingService } from "./services/codeThreadMappingService";
 import { IndexService } from "./services/indexService";
 import { ProjectOverviewService } from "./services/projectOverviewService";
 import { ThreadService } from "./services/threadService";
@@ -55,7 +60,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     context.subscriptions.push(
       vscode.window.registerTreeDataProvider(VIEWS.map, emptyMapProvider),
-      vscode.window.registerTreeDataProvider(VIEWS.threads, emptyThreadsProvider),
+      vscode.window.registerWebviewViewProvider(VIEWS.threads, emptyThreadsProvider),
       vscode.window.registerTreeDataProvider(VIEWS.cards, emptyCardsProvider)
     );
 
@@ -85,6 +90,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const indexService = new IndexService(workspaceFolder.uri.fsPath, persistence, output);
   const threadService = new ThreadService(persistence, indexService, output);
+  const codeThreadMappingService = new CodeThreadMappingService(persistence, indexService);
   const cardService = new CardService(persistence, indexService);
   const canvasService = new CanvasService(persistence, indexService, cardService);
   const projectOverviewService = new ProjectOverviewService(
@@ -97,6 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await Promise.all([
     indexService.initialize(),
     threadService.initialize(),
+    codeThreadMappingService.initialize(),
     cardService.initialize(),
     canvasService.initialize(),
     projectOverviewService.initialize()
@@ -111,17 +118,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   const mapViewProvider = new MapViewProvider(indexService, projectOverviewService);
-  const threadsViewProvider = new ThreadsViewProvider(threadService);
+  const threadsViewProvider = new ThreadsViewProvider(threadService, codeThreadMappingService);
   const cardsViewProvider = new CardsViewProvider(cardService);
-  const threadsTreeView = vscode.window.createTreeView(VIEWS.threads, {
-    treeDataProvider: threadsViewProvider
-  });
-  threadsViewProvider.bindTreeView(threadsTreeView);
+  const threadMarkerDecorations = new ThreadMarkerDecorations(
+    context.extensionUri,
+    codeThreadMappingService,
+    threadService
+  );
 
   context.subscriptions.push(
     controller,
+    threadMarkerDecorations,
     vscode.window.registerTreeDataProvider(VIEWS.map, mapViewProvider),
-    threadsTreeView,
+    vscode.window.registerWebviewViewProvider(VIEWS.threads, threadsViewProvider),
     vscode.window.registerTreeDataProvider(VIEWS.cards, cardsViewProvider),
     vscode.languages.registerCodeLensProvider(
       [
@@ -138,11 +147,55 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ],
       new VibeCodeLensProvider(indexService)
     ),
+    vscode.languages.registerCodeLensProvider(
+      [
+        { scheme: "file", language: "typescript" },
+        { scheme: "file", language: "javascript" },
+        { scheme: "file", language: "typescriptreact" },
+        { scheme: "file", language: "javascriptreact" },
+        { scheme: "file", language: "python" },
+        { scheme: "file", language: "c" },
+        { scheme: "file", language: "cpp" },
+        { scheme: "file", language: "shellscript" },
+        { scheme: "file", language: "json" },
+        { scheme: "file", language: "jsonc" }
+      ],
+      new ThreadCodeLensProvider(codeThreadMappingService)
+    ),
+    vscode.languages.registerHoverProvider(
+      [
+        { scheme: "file", language: "typescript" },
+        { scheme: "file", language: "javascript" },
+        { scheme: "file", language: "typescriptreact" },
+        { scheme: "file", language: "javascriptreact" },
+        { scheme: "file", language: "python" },
+        { scheme: "file", language: "c" },
+        { scheme: "file", language: "cpp" },
+        { scheme: "file", language: "shellscript" },
+        { scheme: "file", language: "json" },
+        { scheme: "file", language: "jsonc" }
+      ],
+      threadMarkerDecorations
+    ),
     vscode.workspace.onDidSaveTextDocument(async (document) => {
       await indexService.refreshFile(document.uri);
     }),
     vscode.commands.registerCommand(COMMANDS.openThread, async (thread) => {
-      await controller.openThread(thread.id);
+      const threadId =
+        typeof thread === "string"
+          ? thread
+          : typeof thread?.threadId === "string"
+            ? thread.threadId
+            : thread?.id;
+      if (!threadId) {
+        vscode.window.showWarningMessage("The selected thread could not be found.");
+        return;
+      }
+
+      await controller.openThread(threadId, {
+        viewColumn: typeof thread?.viewColumn === "number" ? thread.viewColumn : undefined,
+        preserveFocus: typeof thread?.preserveFocus === "boolean" ? thread.preserveFocus : undefined
+      });
     }),
     vscode.commands.registerCommand(COMMANDS.openCard, async (card) => {
       await controller.openCard(card.id);
@@ -155,9 +208,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerRefreshIndexCommand(context, indexService, projectOverviewService);
   registerConfigureModelCommand(context);
   registerTestModelConnectionCommand(context, output);
-  registerAskAboutSelectionCommand(context, indexService, threadService, controller);
-  registerDeleteThreadCommand(context, threadService, () => threadsViewProvider.getSelectedThread());
-  registerExplainCurrentSymbolCommand(context, indexService, threadService, controller);
+  registerAskAboutSelectionCommand(context, indexService, threadService, codeThreadMappingService, controller);
+  registerDeleteThreadCommand(context, threadService, codeThreadMappingService, () => threadsViewProvider.getSelectedThread());
+  registerExplainCurrentSymbolCommand(context, indexService, threadService, codeThreadMappingService, controller);
+  registerOpenThreadFromCodeCommand(context, codeThreadMappingService, threadService, controller);
+  registerGoToCodeFromThreadCommand(
+    context,
+    indexService,
+    threadService,
+    codeThreadMappingService,
+    () => threadsViewProvider.getSelectedThread()
+  );
   registerSaveSelectionAsCardCommand(context, indexService, cardService, controller);
   registerAddThreadAnswerToCanvasCommand(context, threadService, cardService, canvasService, controller);
   registerOpenCanvasCommand(context, controller);

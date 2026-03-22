@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "risk-review",
+  "prompt": "请做一次风险审查，列出 bug 和 edge case。",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: Risk Register",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

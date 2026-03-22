@@ -1,0 +1,11 @@
+{
+  "eval_id": 4,
+  "eval_name": "module-summary",
+  "prompt": "帮我总结这个模块的职责、边界和依赖关系。",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: Typical Change Scenarios",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

@@ -2,15 +2,35 @@ import * as vscode from "vscode";
 
 import { buildSelectionQuestionContext } from "@code-vibe/retrieval";
 import { generateThreadTitle, parseStructuredAnswerSnapshot, streamGroundedQuestion } from "@code-vibe/model-gateway";
-import type { ModelConfig, Thread, ThreadMessage } from "@code-vibe/shared";
+import type {
+  EditorSelectionState,
+  EvidenceSpan,
+  ModelConfig,
+  QuestionContext,
+  Thread,
+  ThreadMessage,
+  ThreadSkillId
+} from "@code-vibe/shared";
 import { createId, nowIso } from "@code-vibe/shared";
 
 import type { PersistenceLayer } from "@code-vibe/persistence";
 
 import { assertModelConfigured } from "../config/settings";
+import { planAskSkillSelection } from "../agent/skillPlanner";
 import { classifyQuestionType } from "../agent/questionClassifier";
 import { orchestrateQuestion } from "../agent/questionOrchestrator";
+import {
+  detectSectionSkillIdsFromQuestion,
+  questionTypeFromSkillId,
+  resolveAgentSkill,
+  toAskPrimaryQuestionType
+} from "../agent/skills";
 import { SkillMemoryBank } from "../agent/skillMemory";
+import {
+  buildRequestedSectionTitleMap,
+  filterStructuredAnswerByRequestedTitles,
+  mergeRequestedSectionsIntoPrimary
+} from "./sectionOrchestration";
 import type { IndexService } from "./indexService";
 
 export class ThreadService {
@@ -65,15 +85,52 @@ export class ThreadService {
     const index = await this.indexService.ensureIndex();
     const { context, evidence } = buildSelectionQuestionContext(index, editorState, question);
     this.output.appendLine(`[retrieval] evidence_count=${evidence.length}`);
-    const questionType = classifyQuestionType(question);
+
+    const fallbackQuestionType = classifyQuestionType(question, this.indexService.getRootPath());
+    const fallbackPrimaryQuestionType = toAskPrimaryQuestionType(fallbackQuestionType);
+    let questionType = fallbackPrimaryQuestionType;
+    let selectedSkillIds: ThreadSkillId[] = [
+      resolveAgentSkill(fallbackPrimaryQuestionType, this.indexService.getRootPath()).id,
+      ...detectSectionSkillIdsFromQuestion(question)
+    ];
+    let selectionReason = "fallback=classifier(base) + keyword-sections";
+
+    try {
+      const plan = await planAskSkillSelection({
+        modelConfig,
+        workspaceRoot: this.indexService.getRootPath(),
+        question,
+        contextSummary: buildAskPlannerContextSummary(editorState, context, evidence)
+      });
+      if (plan) {
+        selectedSkillIds = [plan.primarySkillId, ...plan.secondarySkillIds];
+        selectionReason = plan.reason;
+        questionType = questionTypeFromSkillId(plan.primarySkillId);
+        this.output.appendLine(
+          `[agent-planner] pool=ask primary=${plan.primarySkillId} secondary=${plan.secondarySkillIds.join(",") || "none"} reason=${compactLogText(plan.reason)}`
+        );
+      } else {
+        this.output.appendLine(
+          `[agent-planner] pool=ask fallback=classifier primary=${selectedSkillIds[0] ?? "ExplainSkill"} secondary=${selectedSkillIds.slice(1).join(",") || "none"} reason=invalid_or_empty_plan`
+        );
+      }
+    } catch (error) {
+      this.output.appendLine(
+        `[agent-planner] pool=ask fallback=classifier primary=${selectedSkillIds[0] ?? "ExplainSkill"} secondary=${selectedSkillIds.slice(1).join(",") || "none"} error=${compactLogText(String(error))}`
+      );
+    }
+
     const learnedSkillInstructions = this.skillMemory.getInstructions(questionType);
     const orchestrated = orchestrateQuestion({
       question,
       editorState,
       context,
       evidence,
+      workspaceRoot: this.indexService.getRootPath(),
       forcedQuestionType: questionType,
-      learnedSkillInstructions
+      learnedSkillInstructions,
+      selectedSkillIds,
+      selectionReason
     });
     this.output.appendLine(
       `[agent] question_type=${orchestrated.questionType} skill=${orchestrated.skillId} evidence_count=${orchestrated.prioritizedEvidence.length}`
@@ -122,9 +179,9 @@ export class ThreadService {
 
     let streamedText = "";
     let finalStructuredAnswer: ThreadMessage["structuredAnswer"] | undefined;
-    const strictSectionTitles =
+    const strictSectionTitleMap =
       orchestrated.focusMode === "focused" && orchestrated.requestedSections.length > 0
-        ? new Set(orchestrated.requestedSections.map(normalizeSectionTitle))
+        ? buildRequestedSectionTitleMap(orchestrated.requestedSections)
         : null;
     const provisionalCitations = orchestrated.prioritizedEvidence.map((item, index) => ({
       id: `citation_${index + 1}`,
@@ -150,7 +207,14 @@ export class ThreadService {
             skillId: orchestrated.skillId,
             sourceReferences: provisionalCitations.map((citation) => citation.label)
           });
-          const filteredSnapshot = filterStructuredAnswer(snapshot, strictSectionTitles);
+          const normalizedSnapshot = mergeRequestedSectionsIntoPrimary(
+            snapshot,
+            orchestrated.requestedSections
+          );
+          const filteredSnapshot = filterStructuredAnswerByRequestedTitles(
+            normalizedSnapshot,
+            strictSectionTitleMap
+          );
           this.updateAssistantMessage(thread.id, assistantMessageId, {
             content: streamedText || "Generating answer...",
             structuredAnswer: filteredSnapshot,
@@ -163,7 +227,14 @@ export class ThreadService {
           continue;
         }
 
-        const filteredFinal = filterStructuredAnswer(event.answer.structuredAnswer, strictSectionTitles);
+        const normalizedFinal = mergeRequestedSectionsIntoPrimary(
+          event.answer.structuredAnswer,
+          orchestrated.requestedSections
+        );
+        const filteredFinal = filterStructuredAnswerByRequestedTitles(
+          normalizedFinal,
+          strictSectionTitleMap
+        );
         this.updateAssistantMessage(thread.id, assistantMessageId, {
           content: event.answer.answerMarkdown,
           structuredAnswer: filteredFinal,
@@ -292,33 +363,36 @@ function compactTitle(value: string, maxLength: number): string {
   return `${safe}...`;
 }
 
-function filterStructuredAnswer(
-  answer: ThreadMessage["structuredAnswer"],
-  allowedTitles: Set<string> | null
-): ThreadMessage["structuredAnswer"] {
-  if (!answer || !allowedTitles || !answer.sections || answer.sections.length === 0) {
-    return answer;
-  }
+function buildAskPlannerContextSummary(
+  editorState: EditorSelectionState,
+  context: QuestionContext,
+  evidence: EvidenceSpan[]
+): string {
+  const evidencePreview =
+    evidence
+      .slice(0, 4)
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.path}:${item.startLine}-${item.endLine} reason=${item.reason} score=${item.score.toFixed(2)}`
+      )
+      .join("\n") || "none";
 
-  const filteredSections = answer.sections.filter((section) =>
-    allowedTitles.has(normalizeSectionTitle(section.title))
-  );
-  if (filteredSections.length === 0) {
-    return answer;
-  }
-
-  return {
-    ...answer,
-    sections: filteredSections,
-    extraSections: [],
-    codeBehavior: "",
-    principle: "",
-    callFlow: "",
-    risks: "",
-    uncertainty: ""
-  };
+  return [
+    `activeFile=${editorState.activeFile}`,
+    `selection=${editorState.startLine}-${editorState.endLine}`,
+    `activeSymbol=${context.activeSymbolId ?? "unknown"}`,
+    `selectedTextPreview=${editorState.selectedText.slice(0, 220).replace(/\s+/g, " ").trim() || "none"}`,
+    `evidenceCount=${evidence.length}`,
+    "topEvidence:",
+    evidencePreview
+  ].join("\n");
 }
 
-function normalizeSectionTitle(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
+function compactLogText(value: string, limit = 220): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, limit - 3)}...`;
 }

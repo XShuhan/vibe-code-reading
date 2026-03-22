@@ -1,0 +1,11 @@
+{
+  "eval_id": 6,
+  "eval_name": "simplified-pseudocode",
+  "prompt": "请把这段逻辑改写成伪代码，保留分支顺序。",
+  "assertions": [
+    "Skill id matches expected question type",
+    "with_skill run loads custom SKILL.md path",
+    "with_skill includes skill marker: branch",
+    "without_skill run falls back to default skill document behavior"
+  ]
+}

@@ -1,5 +1,6 @@
 export const COMMANDS = {
   refreshIndex: "vibe.refreshIndex",
+  refreshIndexAndOverview: "vibe.refreshIndexAndOverview",
   testModelConnection: "vibe.testModelConnection",
   configureModel: "vibe.configureModel",
   askAboutSelection: "vibe.askAboutSelection",
@@ -10,6 +11,8 @@ export const COMMANDS = {
   openCanvas: "vibe.openCanvas",
   traceCallPath: "vibe.traceCallPath",
   openThread: "vibe.openThread",
+  openThreadFromCode: "vibe.openThreadFromCode",
+  goToCodeFromThread: "vibe.goToCodeFromThread",
   openCard: "vibe.openCard",
   openCitation: "vibe.openCitation",
   openProjectOverview: "vibe.openProjectOverview"

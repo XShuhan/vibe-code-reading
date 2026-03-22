@@ -5,6 +5,7 @@ import type { CanvasState, Card, Thread, WorkspaceIndex } from "@code-vibe/share
 
 const STORAGE_FILES = {
   threads: "threads.json",
+  codeThreadMappings: "code-thread-mappings.json",
   cards: "cards.json",
   canvas: "canvas.json",
   index: "index.json"
